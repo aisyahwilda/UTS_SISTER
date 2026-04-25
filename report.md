@@ -67,22 +67,22 @@ Penggunaan queue asynchronous (`asyncio.Queue`) membuat proses input tetap cepat
 
 #### 4. Keterkaitan dengan Materi (Bab 1–7)
 ### T1 (Bab 1): Karakteristik Sistem Terdistribusi dan Trade-off
-Sistem terdistribusi adalah kumpulan beberapa komputer yang saling terhubung melalui jaringan dan bekerja bersama untuk menjalankan suatu tugas. Setiap bagian sistem dapat berjalan secara bersamaan, sehingga proses menjadi lebih cepat dan efisien. Namun, karena terdiri dari banyak komponen, sistem seperti ini juga memiliki risiko gangguan, misalnya salah satu bagian mati atau koneksi terputus. Pada project Pub-Sub Log Aggregator ini, ada beberapa trade-off yang perlu diperhatikan. Jika sistem terlalu fokus pada konsistensi data dan pengurutan sempurna, maka performa bisa menurun. Sebaliknya, jika fokus pada kecepatan dan throughput, maka ada kemungkinan data diterima tidak langsung berurutan. Karena itu, sistem ini lebih mengutamakan efisiensi proses dan deduplication dibanding total ordering.
+Sistem terdistribusi adalah kumpulan beberapa komputer yang saling terhubung melalui jaringan dan bekerja bersama untuk menjalankan suatu tugas. Setiap bagian sistem dapat berjalan secara bersamaan, sehingga proses menjadi lebih cepat dan efisien. Namun, karena terdiri dari banyak komponen, sistem seperti ini juga memiliki risiko gangguan, misalnya salah satu bagian mati atau koneksi terputus. Pada project Pub-Sub Log Aggregator ini, ada beberapa trade-off yang perlu diperhatikan. Jika sistem terlalu fokus pada konsistensi data dan pengurutan sempurna, maka performa bisa menurun. Sebaliknya, jika fokus pada kecepatan dan throughput, maka ada kemungkinan data diterima tidak langsung berurutan. Karena itu, sistem ini lebih mengutamakan efisiensi proses dan deduplication dibanding total ordering (van Steen & Tanenbaum, 2023).
 
 ### T2 (Bab 2): Client-Server dan Publish-Subscribe
-Model client-server menggunakan komunikasi langsung antara client dan server. Artinya client harus menghubungi server secara langsung untuk mengirim atau meminta data. Sedangkan pada model publish-subscribe, publisher cukup mengirim event ke sistem tanpa perlu tahu siapa penerimanya. Subscriber juga cukup menerima event sesuai topic yang dibutuhkan. Pada project ini, pendekatan publish-subscribe lebih cocok karena data log bisa dikirim dari banyak sumber secara bersamaan tanpa saling bergantung. Sistem menjadi lebih fleksibel dan mudah dikembangkan.
+Model client-server menggunakan komunikasi langsung antara client dan server. Artinya client harus menghubungi server secara langsung untuk mengirim atau meminta data. Sedangkan pada model publish-subscribe, publisher cukup mengirim event ke sistem tanpa perlu tahu siapa penerimanya. Subscriber juga cukup menerima event sesuai topic yang dibutuhkan. Pada project ini, pendekatan publish-subscribe lebih cocok karena data log bisa dikirim dari banyak sumber secara bersamaan tanpa saling bergantung. Sistem menjadi lebih fleksibel dan mudah dikembangkan (van Steen & Tanenbaum, 2023).
 
 ### T3 (Bab 3): At-least-once, Exactly-once, dan Idempotent Consumer
-Dalam sistem terdistribusi, pengiriman pesan bisa mengalami gangguan. Karena itu sering digunakan model **at-least-once delivery**, yaitu pesan dipastikan terkirim minimal satu kali. Kekurangannya, pesan yang sama bisa terkirim ulang. Model **exactly-once** lebih ideal karena pesan hanya diproses satu kali, tetapi implementasinya lebih sulit. Untuk mengatasi hal tersebut, project ini menggunakan konsep **idempotent consumer**. Artinya, jika event yang sama diterima berkali-kali, hasil akhirnya tetap sama karena event duplicate akan ditolak.
+Dalam sistem terdistribusi, pengiriman pesan bisa mengalami gangguan. Karena itu sering digunakan model **at-least-once delivery**, yaitu pesan dipastikan terkirim minimal satu kali. Kekurangannya, pesan yang sama bisa terkirim ulang. Model **exactly-once** lebih ideal karena pesan hanya diproses satu kali, tetapi implementasinya lebih sulit. Untuk mengatasi hal tersebut, project ini menggunakan konsep **idempotent consumer**. Artinya, jika event yang sama diterima berkali-kali, hasil akhirnya tetap sama karena event duplicate akan ditolak (van Steen & Tanenbaum, 2023).
 
 ### T4 (Bab 4): Topic dan Event ID
 Setiap event memiliki topic dan event_id.
 - **Topic** digunakan untuk mengelompokkan jenis data, misalnya `order`, `payment`, atau `log`.
 - **event_id** digunakan sebagai identitas unik dari setiap event.
-Pada sistem ini, kombinasi topic dan event_id dipakai untuk mengecek apakah event sudah pernah diproses atau belum. Jika sudah ada, maka event dianggap duplicate dan tidak diproses ulang.
+Pada sistem ini, kombinasi topic dan event_id dipakai untuk mengecek apakah event sudah pernah diproses atau belum. Jika sudah ada, maka event dianggap duplicate dan tidak diproses ulang (van Steen & Tanenbaum, 2023).
 
 ### T5 (Bab 5): Ordering Data
-Dalam sistem log aggregator, urutan data tidak selalu harus sempurna. Yang lebih penting adalah data berhasil diterima dan diproses. Jika memaksakan semua event harus urut secara global, maka sistem bisa menjadi lebih lambat karena perlu sinkronisasi tambahan. Karena itu, project ini menggunakan pendekatan yang lebih sederhana, yaitu memproses event sesuai urutan queue pada satu instance. Untuk kebutuhan praktis, cara ini sudah cukup baik.
+Dalam sistem log aggregator, urutan data tidak selalu harus sempurna. Yang lebih penting adalah data berhasil diterima dan diproses. Jika memaksakan semua event harus urut secara global, maka sistem bisa menjadi lebih lambat karena perlu sinkronisasi tambahan. Karena itu, project ini menggunakan pendekatan yang lebih sederhana, yaitu memproses event sesuai urutan queue pada satu instance. Untuk kebutuhan praktis, cara ini sudah cukup baik (van Steen & Tanenbaum, 2023).
 
 ### T6 (Bab 6): Kegagalan Sistem dan Penanganannya
 Gangguan dalam sistem terdistribusi bisa terjadi kapan saja, misalnya:
@@ -90,13 +90,12 @@ Gangguan dalam sistem terdistribusi bisa terjadi kapan saja, misalnya:
 - koneksi terputus
 - event terkirim ulang
 - data datang tidak berurutan
-Pada project ini, duplicate event diatasi dengan mekanisme deduplication menggunakan SQLite. Data event yang sudah pernah diproses disimpan ke database, sehingga meskipun aplikasi restart, sistem tetap bisa mengenali event lama dan mencegah proses ulang.
+Pada project ini, duplicate event diatasi dengan mekanisme deduplication menggunakan SQLite. Data event yang sudah pernah diproses disimpan ke database, sehingga meskipun aplikasi restart, sistem tetap bisa mengenali event lama dan mencegah proses ulang (van Steen & Tanenbaum, 2023).
 
 ### T7 (Bab 7): Eventual Consistency, Idempotency, dan Deduplication
-Eventual consistency berarti data mungkin tidak langsung sama di semua bagian sistem, tetapi akan konsisten setelah beberapa waktu. Pada project ini, event diproses secara asynchronous menggunakan queue. Jadi event tidak selalu langsung diproses saat dikirim, tetapi akan masuk antrian terlebih dahulu. Agar sistem tetap aman dan konsisten, digunakan:
 - **Idempotency** → event yang sama tidak mengubah hasil jika dikirim ulang.
 - **Deduplication** → event duplicate akan dibuang.
-Dengan cara ini, sistem tetap stabil walaupun bekerja secara asynchronous.
+Dengan cara ini, sistem tetap stabil walaupun bekerja secara asynchronous (van Steen & Tanenbaum, 2023).
 
 ### T8 (Bab 1–7): Metrik Evaluasi Sistem
 Beberapa hal yang bisa digunakan untuk menilai performa sistem ini:
@@ -106,13 +105,13 @@ Beberapa hal yang bisa digunakan untuk menilai performa sistem ini:
    Waktu yang dibutuhkan sejak event dikirim sampai selesai diproses.
 3. **Duplicate Rate**  
    Jumlah duplicate event yang berhasil dideteksi dan ditolak.
-Semakin baik nilai ketiga metrik tersebut, maka semakin baik performa sistem.
+Semakin baik nilai ketiga metrik tersebut, maka semakin baik performa sistem (van Steen & Tanenbaum, 2023).
 
 #### 5. Kesimpulan
 Project ini berhasil membuat sistem log aggregator sederhana menggunakan konsep publish-subscribe. Sistem dapat menerima event, memproses event secara asynchronous, serta mencegah duplicate menggunakan SQLite. Selain itu, sistem tetap bisa mengenali duplicate walaupun aplikasi di-restart. Hal ini menunjukkan bahwa konsep idempotency dan deduplication sudah berjalan dengan baik. Penggunaan Docker juga membantu proses deployment agar aplikasi lebih mudah dijalankan di berbagai perangkat.
 
 #### 6. Referensi
-Tanenbaum, A. S., & van Steen, M. (2023). *Distributed Systems* (4th ed.). Maarten van Steen.
+van Steen, M., & Tanenbaum, A. S. (2023). *Distributed systems* (4th ed.). Maarten van Steen.
 
 ## 7. Cara Menjalankan
 Pastikan Docker sudah terinstal pada perangkat.
