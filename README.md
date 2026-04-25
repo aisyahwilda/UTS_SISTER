@@ -1,78 +1,96 @@
 # UTS Aggregator Service
-
-Layanan aggregator event berbasis **FastAPI + asyncio queue** dengan deduplikasi persisten lokal menggunakan **SQLite**.
+Project ini adalah layanan aggregator event sederhana yang dibuat menggunakan **FastAPI**, **asyncio queue**, dan **SQLite**.  
+Fungsi utama sistem ini adalah menerima event dari publisher, memproses event melalui queue, lalu mencegah data yang sama diproses lebih dari satu kali.
 
 ## Fitur Utama
+- Menerima event satuan maupun batch.
+- Event masuk ke queue dan diproses oleh worker.
+- Sistem dapat mendeteksi event duplicate.
+- Data duplicate tidak akan diproses ulang.
+- Riwayat duplicate disimpan di SQLite.
+- Menyediakan endpoint untuk melihat data event dan statistik.
 
-- `POST /publish` menerima single event atau batch event.
-- Validasi skema event dengan Pydantic.
-- Worker internal memproses event dari in-memory queue.
-- Deduplikasi idempoten berdasarkan `(topic, event_id)`.
-- `GET /events?topic=...` mengembalikan event unik yang sudah diproses.
-- `GET /stats` mengembalikan `received`, `unique_processed`, `duplicate_dropped`, `topics`, `uptime`.
-
-## Skema Event
+## Format Event
+Contoh data event yang dikirim:
 
 ```json
 {
-  "topic": "string",
-  "event_id": "string-unik",
-  "timestamp": "ISO8601",
-  "source": "string",
-  "payload": {}
+  "topic": "order",
+  "event_id": "100",
+  "timestamp": "2026-04-22T10:00:00Z",
+  "source": "mobile",
+  "payload": {
+    "user_id": 1
+  }
 }
-```
-
-## Menjalankan Lokal (tanpa Docker)
-
-```powershell
+````
+## Menjalankan Project Secara Lokal
+Install dependency terlebih dahulu:
 pip install -r requirements.txt
+
+Lalu jalankan server:
 python -m uvicorn src.main:app --host 0.0.0.0 --port 8080
-```
 
-## Menjalankan dengan Docker (wajib)
+Jika berhasil, aplikasi akan berjalan di:
+http://localhost:8080
 
-```powershell
+Dokumentasi Swagger:
+http://localhost:8080/docs
+
+
+## Menjalankan dengan Docker
+Build image:
 docker build -t uts-aggregator .
-docker run -p 8080:8080 uts-aggregator
-```
 
-## Uji Simulasi Duplicate Delivery
+Jalankan container:
+docker run -p 8080:8080 --name my-aggregator uts-aggregator
 
-Jalankan aggregator terlebih dahulu, lalu kirim event dalam jumlah besar dengan duplikasi:
+Jika ingin menjalankan kembali container yang sudah ada:
+docker start my-aggregator
 
-```powershell
-python -m src.publisher_sim --base-url http://localhost:8080 --total 5000 --duplicate-ratio 0.2
-```
+Jika ingin menghentikan container:
+docker stop my-aggregator
 
-Parameter `--duplicate-ratio 0.2` berarti sekitar 20% dari total event akan dikirim sebagai duplikasi, sementara sisanya unik.
-
-## Docker Compose (opsional bonus)
-
-```powershell
+## Menjalankan dengan Docker Compose (Opsional)
 docker compose up --build
-```
 
-Compose menyediakan dua service:
+## Endpoint API
+### POST /publish
+Digunakan untuk mengirim event ke sistem.
+Bisa menerima:
+* satu event
+* beberapa event sekaligus (batch)
 
-- `aggregator` (API)
-- `publisher` (simulator duplicate delivery)
+### GET /events
+Menampilkan semua event yang sudah berhasil diproses.
+
+### GET /events?topic=order
+Menampilkan event berdasarkan topic tertentu.
+
+### GET /stats
+Menampilkan statistik sistem, seperti:
+* jumlah event diterima
+* jumlah event unik yang diproses
+* jumlah duplicate yang ditolak
+* topic yang pernah diproses
+* waktu server berjalan
+
+## Menjalankan Test Duplicate
+
+Untuk simulasi pengiriman banyak event dan duplicate:
+python -m src.publisher_sim --base-url http://localhost:8080 --total 5000 --duplicate-ratio 0.2
+Artinya sekitar 20% event yang dikirim adalah duplicate.
 
 ## Menjalankan Unit Test
-
-```powershell
 pytest -q
-```
 
-## Endpoint Ringkas
+## Asumsi Sistem
 
-- `POST /publish`
-- `GET /events?topic=orders`
-- `GET /events`
-- `GET /stats`
+* Sistem berjalan pada satu instance / satu node.
+* Deduplikasi hanya berlaku di aplikasi ini, bukan antar banyak server.
+* Data duplicate disimpan di file SQLite (`dedup.db`).
+* Urutan proses mengikuti queue pada instance yang sama.
+* Fokus utama sistem adalah mencegah duplicate dan menjaga proses tetap stabil.
 
-## Asumsi Penting
-
-- Deduplikasi bersifat lokal-node (tidak distributed).
-- Persistensi dedup disimpan di SQLite file lokal (`dedup.db`).
-- Ordering total lintas topik **tidak diwajibkan**; sistem menjaga proses queue FIFO pada instance yang sama, tetapi fokus utama adalah idempotency dan throughput.
+## Kesimpulan
+Sistem ini berhasil menerapkan konsep pub-sub sederhana dengan queue internal, worker asynchronous, serta deduplication menggunakan SQLite.

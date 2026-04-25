@@ -1,158 +1,93 @@
-# Report UTS Aggregator
+# Laporan UTS Sistem Paralel dan Terdistribusi
 
-## 1. Latar Belakang
+## Pub-Sub Log Aggregator
 
-Sistem event-driven sering menghadapi duplicate delivery dan kebutuhan idempotency. Proyek ini membangun aggregator lokal yang memproses event secara asynchronous dan tahan restart untuk deduplikasi.
-
-## 2. Tujuan
-
-- Menerima event single/batch via HTTP.
-- Menjamin idempotency berbasis `(topic, event_id)`.
-- Menyediakan statistik operasional dan observability sederhana.
-
-## 3. Desain Arsitektur
-
-Komponen utama:
-
-- `src/main.py`: API FastAPI, queue in-memory, lifecycle worker.
-- `src/models.py`: validasi skema event (Pydantic).
-- `src/queue_worker.py`: consumer async dari queue.
-- `src/dedup_store.py`: dedup store SQLite persisten lokal.
-- `src/storage.py`: penyimpanan event unik yang telah diproses.
-# Report UTS Aggregator
+**Nama:** Aisyah Wilda Fauziah Amanda
+**NIM:** 11231005
+**GitHub:** https://github.com/aisyahwilda/UTS_SISTER
+**Video Demo:** https://youtu.be/YrOnDY7P2sE?si=cnd9WF6rJ8-KLlpK
+---
 
 ## 1. Ringkasan Sistem dan Arsitektur
+Sistem yang saya buat adalah sebuah layanan log aggregator sederhana yang menggunakan konsep publish-subscribe. Intinya, sistem ini menerima data event dari berbagai sumber (publisher), lalu memprosesnya tanpa harus mengetahui secara langsung siapa pengirim maupun siapa penerima akhirnya.
+Berikut gambaran sederhana arsitektur sistem:
 
-Sistem ini adalah layanan aggregator event berbasis Python dengan FastAPI dan `asyncio`. Layanan menerima event melalui HTTP, memasukkannya ke antrean internal in-memory, lalu memprosesnya secara asinkron melalui consumer worker. Event unik disimpan, sedangkan duplikasi dibuang berdasarkan pasangan `(topic, event_id)`.
+[ Publisher ]
+      |
+      | HTTP POST (/publish)
+      v
+[ FastAPI API ]
+      |
+      v
+[ asyncio.Queue ]
+      |
+      v
+[ Worker / Consumer ] ----> [ SQLite (Dedup Store) ]
+      |
+      v
+[ Stored Events ]
+      ^
+      |
+      | HTTP GET (/events, /stats)
+      |
+[ Client / User ]
 
-### Diagram Sederhana
+Alur kerja sistem ini adalah sebagai berikut:
+* Publisher mengirim data ke endpoint `/publish`
+* Data akan masuk ke dalam queue (antrian sementara di memori)
+* Consumer (worker) mengambil data dari queue
+* Sebelum diproses, data akan dicek terlebih dahulu ke database apakah sudah pernah diproses atau belum
+* Jika belum → data diproses dan disimpan
+* Jika sudah → dianggap duplikat dan tidak diproses lagi
 
-```text
-Publisher / Client
-  |
-  v
-POST /publish
-  |
-  v
-In-memory Queue (asyncio.Queue)
-  |
-  v
-Queue Worker / Consumer
-  |
-  +--> Dedup Store (SQLite lokal)
-  |
-  +--> Event Storage (event unik)
-  |
-  +--> Stats (received, unique_processed, duplicate_dropped, topics, uptime)
-```
-
-### Komponen Utama
-
-- `src/main.py`: entrypoint aplikasi FastAPI, lifecycle worker, dan endpoint API.
-- `src/models.py`: validasi skema event.
-- `src/queue_worker.py`: consumer yang memproses event dari queue.
-- `src/dedup_store.py`: dedup store SQLite lokal dan persisten.
-- `src/storage.py`: penyimpanan event unik per topic.
-- `src/stats.py`: metrik runtime dan snapshot statistik.
-- `src/publisher_sim.py`: simulasi duplicate delivery untuk skenario at-least-once.
+Sistem ini fokus pada dua hal utama, yaitu tidak memproses data yang sama lebih dari satu kali (deduplication) serta tetap dapat berjalan dengan baik walaupun terjadi pengiriman ulang data. Selain itu, sistem menggunakan pendekatan asynchronous agar proses pengiriman event tidak terhambat oleh proses pengecekan dan penyimpanan data.
 
 ## 2. Keputusan Desain
+### Idempotency
+Consumer dirancang agar bersifat idempotent. Artinya, jika event yang sama dikirim berulang kali, hasil akhirnya tetap sama dan tidak menyebabkan data ganda.
 
-### 2.1 Idempotency
+### Dedup Store
+Sistem menggunakan SQLite sebagai penyimpanan data deduplikasi. Alasan pemilihan SQLite adalah karena ringan, mudah digunakan, dan tidak memerlukan konfigurasi tambahan. Selain itu, data tetap tersimpan walaupun aplikasi di-restart.
 
-Idempotency diterapkan dengan key dedup `(topic, event_id)`. Satu event dengan key yang sama hanya diproses sekali meskipun diterima berkali-kali. Pendekatan ini sesuai untuk aggregator karena identitas event ditentukan oleh topik dan ID uniknya.
+### Ordering
+Sistem tidak menerapkan total ordering karena dalam kasus ini urutan event tidak terlalu berpengaruh. Yang lebih penting adalah semua event tetap dapat diproses dengan benar.
 
-### 2.2 Dedup Store
+### Retry
+Sistem menggunakan konsep at-least-once delivery, sehingga memungkinkan adanya pengiriman ulang (retry). Duplicate yang muncul akan ditangani oleh mekanisme deduplication di sisi consumer.
 
-Dedup store menggunakan SQLite lokal agar data dedup tetap ada setelah restart container. Pilihan SQLite dipakai karena:
+## 3. Analisis Performa
+Berdasarkan hasil pengujian, sistem mampu menangani ribuan event dengan baik, termasuk yang mengandung duplikasi. Pada pengujian, sistem mampu memproses lebih dari 5.000 event dengan sekitar 20% data duplikat, dan tetap berjalan secara responsif.
+Beberapa metrik yang dapat dilihat melalui endpoint `/stats` antara lain:
+* `received`: total event yang diterima
+* `unique_processed`: event yang berhasil diproses
+* `duplicate_dropped`: event yang dibuang karena duplikat
+* `topics`: daftar topik yang ada
+* `uptime`: lama waktu sistem berjalan
 
-- sederhana dan lokal-only,
-- tidak membutuhkan layanan eksternal,
-- mendukung constraint `PRIMARY KEY` untuk mencegah duplikasi,
-- cocok untuk skenario tugas yang menekankan persistensi restart.
+Penggunaan queue asynchronous (`asyncio.Queue`) membuat proses input tetap cepat dan tidak terblokir, meskipun terdapat proses pengecekan ke database.
 
-### 2.3 Ordering
+## 4. Keterkaitan dengan Materi (Bab 1–7)
+* **Bab 1:** Sistem ini termasuk sistem terdistribusi dan terdapat trade-off antara performa dan konsistensi.
+* **Bab 2:** Menggunakan arsitektur publish-subscribe sehingga publisher dan consumer tidak saling bergantung langsung.
+* **Bab 3:** Menggunakan konsep at-least-once delivery sehingga membutuhkan idempotent consumer (Tanenbaum & van Steen, 2023).
+* **Bab 4:** `event_id` digunakan sebagai identitas unik untuk mendukung proses deduplication.
+* **Bab 5:** Tidak menggunakan total ordering karena tidak terlalu dibutuhkan dalam konteks ini.
+* **Bab 6:** Mengatasi kemungkinan duplicate dan crash dengan menggunakan SQLite sebagai penyimpanan persisten.
+* **Bab 7:** Sistem ini menggunakan konsep eventual consistency, di mana data akan menjadi konsisten seiring waktu.
 
-Total ordering global tidak diwajibkan untuk kasus ini. Yang utama adalah event unik diproses idempoten dan hasilnya konsisten per key dedup. Queue internal tetap mempertahankan urutan pemrosesan pada satu instance, tetapi duplikasi dapat dibuang saat diproses sehingga urutan akhir yang tersimpan tidak harus identik dengan urutan masuk mentah.
+## 5. Kesimpulan
+Sistem yang dibuat berhasil mengimplementasikan log aggregator sederhana dengan fitur utama seperti deduplication, idempotency, dan pemrosesan asynchronous. Selain itu, sistem ini juga telah diuji menggunakan Docker untuk memastikan kemudahan dalam deployment dan portability.
 
-### 2.4 Retry dan Reliability
+## 6. Referensi
+Tanenbaum, A. S., & van Steen, M. (2023). *Distributed systems: principles and paradigms* (4th ed.). Pearson.
 
-Reliability disimulasikan dengan publisher yang dapat mengirim event duplikat (at-least-once delivery). Jika container restart, dedup store SQLite tetap mencegah event yang sama diproses ulang selama file database lokal masih tersedia atau di-mount sebagai volume.
-
-## 3. Analisis Performa dan Metrik
-
-### 3.1 Metrik yang Diukur
-
-- `received`: jumlah event yang diterima endpoint `/publish`.
-- `unique_processed`: jumlah event unik yang berhasil diproses.
-- `duplicate_dropped`: jumlah event duplikat yang dibuang.
-- `topics`: daftar topik yang sudah diproses.
-- `uptime`: lama layanan berjalan.
-
-### 3.2 Hasil Uji
-
-Unit test mencakup skenario berikut:
-
-- event single dan batch,
-- duplikasi event,
-- persistensi dedup setelah restart simulasi,
-- validasi skema event,
-- konsistensi `/events` dan `/stats`,
-- stress test kecil,
-- stress test skala 5.000 event dengan sekitar 20% duplikasi.
-
-### 3.3 Catatan Performa
-
-Sistem tetap responsif karena pemrosesan event dilakukan secara asinkron melalui queue internal. Untuk beban besar, publisher simulator dapat mengirim 5.000 event dengan rasio duplikasi sekitar 20% untuk menguji dedup dan stabilitas layanan.
-
-## 4. Keterkaitan ke Bab 1–7
-
-### Bab 1. Pendahuluan
-
-Menjelaskan masalah duplicate delivery, kebutuhan idempotency, dan tujuan membangun layanan aggregator lokal.
-
-### Bab 2. Tinjauan Pustaka
-
-Menghubungkan konsep FastAPI, asyncio queue, SQLite, at-least-once delivery, dan deduplication dalam sistem event-driven.
-
-### Bab 3. Analisis Kebutuhan
-
-Mencakup kebutuhan input event, endpoint API, dedup persisten, toleransi restart, dan skenario pengujian performa.
-
-### Bab 4. Perancangan Sistem
-
-Menjelaskan arsitektur komponen, alur data, strategi dedup, dan keputusan desain ordering.
-
-### Bab 5. Implementasi
-
-Berisi implementasi pada `src/main.py`, `src/models.py`, `src/queue_worker.py`, `src/dedup_store.py`, `src/storage.py`, dan `src/stats.py`.
-
-### Bab 6. Pengujian dan Hasil
-
-Berisi hasil `pytest`, validasi skema, dedup, persistensi restart, dan stress test 5.000 event.
-
-### Bab 7. Kesimpulan dan Saran
-
-Menyimpulkan bahwa layanan memenuhi kebutuhan dasar aggregator lokal dan menyarankan peningkatan seperti volume persistence yang lebih eksplisit, observability yang lebih kaya, dan pemisahan worker bila skala bertambah.
-
-## 5. Sitasi Buku Utama (APA 7)
-
-> **Catatan:** metadata buku utama perlu diambil dari `docs/buku-utama.pdf`. File PDF tersebut tidak tersedia di workspace ini, jadi bagian berikut disiapkan dalam format APA 7 dan perlu dilengkapi sesuai metadata asli.
-
-### Format Sitasi Buku
-
-Nama Belakang, Inisial. (Tahun). *Judul buku: Subjudul jika ada*. Penerbit. https://doi.org/... atau URL
-
-### Contoh Sitasi dalam Teks
-
-- (Nama Belakang, Tahun)
-- Nama Belakang (Tahun)
-
-### Daftar Pustaka
-
-- Nama Belakang, I. (Tahun). *Judul buku: Subjudul jika ada*. Penerbit.
-- Jika tersedia DOI/URL, tambahkan setelah penerbit: *Penerbit. https://doi.org/...*
-
-## 6. Kesimpulan
-
-Implementasi sudah mencakup endpoint utama, consumer internal, dedup lokal persisten, logging duplikasi, simulasi at-least-once delivery, dan pengujian performa. Struktur laporan ini disusun agar mudah dipetakan ke Bab 1–7 dan siap dilengkapi dengan metadata buku utama dari PDF referensi.
+## 7. Cara Menjalankan
+Pastikan Docker sudah terinstal pada perangkat.
+### Build Image
+```bash
+docker build -t uts-aggregator .
+```
+### Run Container
+```bash
+docker run -p 8080:8080 uts-aggregator
+```
