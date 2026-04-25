@@ -6,7 +6,6 @@
 **NIM:** 11231005
 **GitHub:** https://github.com/aisyahwilda/UTS_SISTER
 **Video Demo:** https://youtu.be/YrOnDY7P2sE?si=cnd9WF6rJ8-KLlpK
----
 
 ## 1. Ringkasan Sistem dan Arsitektur
 Sistem yang saya buat adalah sebuah layanan log aggregator sederhana yang menggunakan konsep publish-subscribe. Intinya, sistem ini menerima data event dari berbagai sumber (publisher), lalu memprosesnya tanpa harus mengetahui secara langsung siapa pengirim maupun siapa penerima akhirnya.
